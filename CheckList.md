@@ -18,10 +18,6 @@ Estos customers tienen las validaciones activas mediante codigo hardcodeado y de
 | Customer | Codigo | Validaciones AAA | Hoteleria | RestringirAAA recomendado |
 |----------|--------|-------------------|-----------|--------------------------|
 | **LUNDIN** | 22 | Si | Si | `1` (true) |
-| **ZAFRANAL** | 103 | Si | No (solo LUNDIN la tenia) | `1` (true) - Evaluar si debe incluir Hoteleria |
-
-> **Nota importante:** En el nuevo sistema, `RestringirAAA = 1` habilita **tanto** las validaciones AAA **como** Hoteleria. En produccion, Hoteleria solo aplicaba para LUNDIN (22). Al activar `RestringirAAA = 1` para ZAFRANAL, tambien se habilitaria Hoteleria. Se debe confirmar con negocio si esto es correcto o si se requiere un flag independiente.
-
 ---
 
 ## 2. Informacion del API
@@ -157,7 +153,6 @@ Los siguientes clientes operan actualmente en **produccion** con validaciones AA
 | Cliente | Codigo Customer | AAA en Prod | Hoteleria en Prod | Accion requerida |
 |---------|----------------|-------------|-------------------|------------------|
 | **LUNDIN** | 22 | Si | Si | Activar `RestringirAAA = 1` |
-| **ZAFRANAL** | 103 | Si | No | Activar `RestringirAAA = 1` (evaluar Hoteleria) |
 
 Para habilitar las validaciones en cualquier cliente nuevo:
 ```sql
@@ -174,10 +169,3 @@ Independientemente de `RestringirAAA`, cada customer puede tener configuraciones
 |--------|---------------|----------------------|
 | 01 | Restriccion Horas Minimas Entre Accesos | CALCEM (8 hrs) |
 | 02 | Restriccion Puntos de Control | Kolpa |
-
----
-
-## 7. Observaciones
-
-- Al activar `RestringirAAA = 1`, es posible que un mismo concepto (ej: VIDA LEY) aparezca duplicado en restricciones, ya que se evalua desde dos fuentes diferentes (requisitos de acceso y proxy de seguros). Se debe definir con negocio si esto es aceptable.
-- Se corrigio un error de transaccion que ocurria cuando un servicio externo (Hoteleria) fallaba despues del registro. El registro de control de acceso se mantiene correctamente en BD.
