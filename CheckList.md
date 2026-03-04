@@ -7,7 +7,7 @@ Se realizo una mejora que reemplaza las validaciones de acceso basadas en **cust
 
 | Antes (hardcodeado) | Ahora (configurable) |
 |---|---|
-| Validaciones AAA solo para customers definidos en codigo (`"22", "103"`) | Cualquier customer puede activarlas con `RestringirAAA = 1` en BD |
+| Validaciones AAA solo para customers definidos en codigo (`"22"`) | Cualquier customer puede activarlas con `RestringirAAA = 1` en BD |
 | Hoteleria solo para customer `"22"` | Se activa junto con `RestringirAAA = 1` |
 | Requeria cambio de codigo y despliegue | Solo requiere actualizar un campo en BD |
 
