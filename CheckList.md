@@ -1,4 +1,4 @@
-# Plan de Pruebas - API Control de Acceso por Credencial
+# API Control de Acceso por Credencial
 ## Validacion de Restricciones Configurables (QAS)
 
 ## 1. Contexto
