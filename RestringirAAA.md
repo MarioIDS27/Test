@@ -62,12 +62,14 @@
 
 ### Datos de referencia en BD
 
-#### PersonaRequisitoAcceso (tabla aaa.PersonaRequisitosAccesos)
-| RequisitoAcceso | Codigo | FechaVencimiento | Tipo |
-|-----------------|--------|------------------|------|
-| VIDA LEY | 02 | null | Permanente |
-| SCTR | 01 | null | Permanente |
-| DOCUMENTOS | 07 | 2026-01-31 | Vencido |
+#### PersonaRequisitoAcceso (tabla aaa.PersonasRequisitosAccesos)
+| RequisitoAccesoId | RequisitoAcceso | Codigo | FechaVencimiento | TieneVencimiento | Tipo |
+|---|-----------------|--------|------------------|---|------|
+| `E9F560CB...` | VIDA LEY | 02 | `null` | 1 | Permanente |
+| `09B149DC...` | SCTR | 01 | `null` | 1 | Permanente |
+| `09A25C13...` | DOCUMENTOS | 07 | `2026-01-31` | 1 | Vencido |
+
+> **Nota:** El registro de DOCUMENTOS tiene `valor = "Examen Medico"` pero su RequisitoAccesoId apunta a DOCUMENTOS (cod 07).
 
 #### Seguros (proxy AAA)
 | Seguro | FechaVencimiento | Estado |
@@ -450,21 +452,64 @@
 
 ### 9. Observacion: Restriccion duplicada VIDA LEY
 
-> **Hallazgo:** VIDA LEY aparece 2 veces en la respuesta con diferentes origenes:
->
-> | # | Nombre | Fuente | Codigo |
-> |---|--------|--------|--------|
-> | 1 | "Restriccion permanente en VIDA LEY" | PersonaRequisitoAcceso | 02 |
-> | 2 | "VIDA LEY vencido el 26/01/2026" | Proxy Seguros AAA | null |
->
-> **Analisis:** Esto ocurre porque `PersonaRequisitoAcceso` y el proxy de Seguros evaluan la misma condicion (VIDA LEY) pero desde fuentes diferentes:
-> - `PersonaRequisitoAcceso` evalua el requisito de acceso en la BD local
-> - El proxy de Seguros consulta el servicio AAA externo
->
-> **Preguntas para definir:**
-> - [ ] Es aceptable que aparezca duplicado? El frontend debe manejar duplicados?
-> - [ ] Se deberia deduplicar en el backend por codigo de requisito?
-> - [ ] Son restricciones con diferente significado (permanente vs vencimiento temporal)?
+> **Hallazgo:** VIDA LEY aparece 2 veces en la respuesta con diferentes origenes.
+
+#### Datos en BD que causan el duplicado
+
+**Tabla `aaa.PersonasRequisitosAccesos`** (fuente 1):
+
+| PersonaRequisitoAccesoId | RequisitoAccesoId | RequisitoAcceso | FechaVencimiento | TieneVencimiento | Resultado en API |
+|---|---|---|---|---|---|
+| `986D4A3B...` | `E9F560CB...` (VIDA LEY, cod 02) | VIDA LEY | `null` | 1 | "Restriccion permanente en VIDA LEY" |
+| `30425E70...` | `09B149DC...` (SCTR, cod 01) | SCTR | `null` | 1 | "Restriccion permanente en SCTR" |
+| `AD3CB39A...` | `09A25C13...` (DOCUMENTOS, cod 07) | DOCUMENTOS | `2026-01-31` (vencido) | 1 | "DOCUMENTOS Vencido: 31/01/2026" |
+
+> **Nota:** El tercer registro tiene `valor = "Examen Medico"` pero su RequisitoAccesoId apunta a DOCUMENTOS (cod 07), no a EXAMEN MEDICO (cod 04).
+
+**Tabla `aaa.PersonaSeguros` + `aaa.VigenciasSeguros`** (fuente 2):
+
+| PersonaSeguroId | RequisitoAccesoId | Seguro | FechaVencimiento | Resultado en API |
+|---|---|---|---|---|
+| `94B9FC24...` | `E9F560CB...` (VIDA LEY) | VIDA LEY (CodigoVidaLey = "1234") | `2026-01-26` (vencido) | "VIDA LEY vencido el 26/01/2026" |
+| `755A08E4...` | `09B149DC...` (SCTR) | SCTR (CodigoPolizaPension = "1234") | `2026-03-26` (vigente) | No genera restriccion |
+
+#### Relacion del duplicado
+
+Ambas tablas referencian el **mismo RequisitoAccesoId** `E9F560CB...` = VIDA LEY:
+
+```
+aaa.PersonasRequisitosAccesos    aaa.RequisitosAccesos    aaa.PersonaSeguros
+┌──────────────────────┐        ┌──────────────────┐     ┌──────────────────┐
+│ PersonaRequisitoId   │        │ RequisitoAccesoId│     │ PersonaSeguroId  │
+│ 986D4A3B...          │───────>│ E9F560CB...      │<────│ 94B9FC24...      │
+│ FechaVenc = null     │        │ Nombre: VIDA LEY │     │ FechaVenc =      │
+│                      │        │ Codigo: 02       │     │ 2026-01-26       │
+└──────────────────────┘        └──────────────────┘     └──────────────────┘
+        │                                                         │
+        v                                                         v
+ "Restriccion permanente                              "VIDA LEY vencido el
+  en VIDA LEY"                                         26/01/2026"
+```
+
+#### Analisis
+
+| Aspecto | Fuente 1: PersonaRequisitoAcceso | Fuente 2: Proxy Seguros |
+|---|---|---|
+| **Tabla origen** | `aaa.PersonasRequisitosAccesos` (BD local) | `aaa.PersonaSeguros` + `aaa.VigenciasSeguros` (proxy AAA) |
+| **Significado** | Requisito de acceso no cumplido (sin fecha = permanente) | Seguro registrado pero con vigencia vencida |
+| **Mensaje** | "Restriccion permanente en VIDA LEY" | "VIDA LEY vencido el 26/01/2026" |
+| **Codigo** | `02` | `null` |
+
+Son **2 evaluaciones independientes** del mismo concepto:
+- La **permanente** indica que el requisito de acceso VIDA LEY no tiene fecha de vencimiento registrada (nunca se completo o se registro sin fecha)
+- La **vencida del seguro** indica que el seguro VIDA LEY que si tiene registrado ya caduco el 26/01/2026
+
+#### Preguntas para definir
+
+- [ ] Es aceptable que VIDA LEY aparezca duplicado? El frontend debe manejar duplicados?
+- [ ] Se deberia deduplicar en el backend filtrando por RequisitoAccesoId comun?
+- [ ] El registro en PersonaRequisitoAcceso deberia actualizarse cuando se renueva el seguro?
+- [ ] SCTR no aparece duplicado porque su seguro esta vigente (2026-03-26). Si venciera, tambien apareceria 2 veces?
 
 ---
 
